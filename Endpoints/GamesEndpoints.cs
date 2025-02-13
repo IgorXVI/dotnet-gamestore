@@ -14,58 +14,54 @@ public static class GamesEndpoints
     {
         var group = app.MapGroup("games").WithParameterValidation();
 
-        group.MapGet("/", (GameStoreContext dbContext) =>
+        group.MapGet("/", async (GameStoreContext dbContext) =>
         {
-            var games = dbContext.Games.Include(x => x.Genre).ToArray().Select(x => x.ToDto());
+            var games = await dbContext.Games.Include(x => x.Genre).Select(x => x.ToDto()).AsNoTracking().ToListAsync();
             return Results.Ok(games);
         });
 
-        group.MapPost("/", (CreateGameDTO newGame, GameStoreContext dbContext) =>
+        group.MapPost("/", async (CreateGameDTO newGame, GameStoreContext dbContext) =>
         {
             Game game = newGame.ToEntity();
-            game.Genre = dbContext.Genres.Find(newGame.GenreId);
+            game.Genre = await dbContext.Genres.FindAsync(newGame.GenreId);
 
-            dbContext.Games.Add(game);
-            dbContext.SaveChanges();
+            await dbContext.Games.AddAsync(game);
+            await dbContext.SaveChangesAsync();
 
             return Results.CreatedAtRoute(GET_GAME_ROUTE_NAME, new { id = game.Id }, game.ToDto());
         });
 
-        group.MapGet("/{id}", (int id, GameStoreContext dbContext) =>
+        group.MapGet("/{id}", async (int id, GameStoreContext dbContext) =>
         {
-            var oldGame = dbContext.Games.Include(x => x.Genre).FirstOrDefault(x => x.Id == id);
+            var oldGame = await dbContext.Games.Include(x => x.Genre).FirstOrDefaultAsync(x => x.Id == id);
 
             if (oldGame == null)
             {
                 return Results.NotFound();
             }
 
-            return Results.Ok(oldGame.ToDto());
+            return Results.Ok(oldGame.ToGameDetailsDto());
         }).WithName(GET_GAME_ROUTE_NAME);
 
-        group.MapPut("/{id}", (int id, UpdateGameDTO newGame, GameStoreContext dbContext) =>
+        group.MapPut("/{id}", async (int id, UpdateGameDTO newGame, GameStoreContext dbContext) =>
         {
-            var oldGame = dbContext.Games.Find(id);
+            var oldGame = await dbContext.Games.FindAsync(id);
 
             if (oldGame == null)
             {
                 return Results.NotFound();
             }
 
-            oldGame.Name = newGame.Name;
-            oldGame.GenreId = newGame.GenreId;
-            oldGame.Price = newGame.Price;
-            oldGame.ReleaseDate = newGame.ReleaseDate;
+            dbContext.Entry(oldGame).CurrentValues.SetValues(newGame.ToEntity(id));
 
-            dbContext.Games.Update(oldGame);
-            dbContext.SaveChanges();
+            await dbContext.SaveChangesAsync();
 
             return Results.Ok();
         });
 
-        group.MapDelete("/{id}", (int id, GameStoreContext dbContext) =>
+        group.MapDelete("/{id}", async (int id, GameStoreContext dbContext) =>
         {
-            var oldGame = dbContext.Games.Find(id);
+            var oldGame = await dbContext.Games.FindAsync(id);
 
             if (oldGame == null)
             {
@@ -73,7 +69,7 @@ public static class GamesEndpoints
             }
 
             dbContext.Games.Remove(oldGame);
-            dbContext.SaveChanges();
+            await dbContext.SaveChangesAsync();
 
             return Results.Ok();
         });
